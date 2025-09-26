@@ -1,13 +1,50 @@
 #!/usr/bin/env node
 
 import { createServer } from 'node:http';
+import { readFile, access } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import serverHandler from './dist/server/server.js';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const port = process.env.PORT || 3000;
+
+// MIME type mapping for static files
+const mimeTypes = {
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.html': 'text/html',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json',
+};
 
 const server = createServer(async (req, res) => {
   try {
     const url = `http://${req.headers.host}${req.url}`;
+    const urlObj = new URL(url);
+
+    // Try to serve static files first
+    const staticFilePath = join(__dirname, 'dist', 'client', urlObj.pathname);
+
+    try {
+      await access(staticFilePath);
+      const fileContent = await readFile(staticFilePath);
+      const ext = urlObj.pathname.substring(urlObj.pathname.lastIndexOf('.'));
+      const mimeType = mimeTypes[ext] || 'application/octet-stream';
+
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+      res.end(fileContent);
+      return;
+    } catch {
+      // File not found, continue to server handler
+    }
 
     // Convert Node.js request to Web API Request
     const webRequest = new Request(url, {
